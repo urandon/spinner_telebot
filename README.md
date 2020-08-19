@@ -1,0 +1,2 @@
+# spinner_telebot
+wheel
