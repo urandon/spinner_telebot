@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import datetime
 import random
 from typing import List, Dict, Set
@@ -40,9 +40,10 @@ dp.filters_factory.bind(AdminFilter)
 class ChatContext:
     wheel : str = 'пижма'
     action : str = 'запутать'
-    last_winner : str
-    last_spin : datetime.date
-    users : Set[str] = set()
+    last_winner : str = None
+    last_spin : datetime.date = None
+    users : List[str] = field(default_factory=list)
+    users_set : Set[str] = field(default_factory=set)
 
 chats : Dict[str, ChatContext] = {}
 
@@ -56,29 +57,38 @@ def get_pretty_username(user: types.User):
 
 
 async def context_filter(message: types.Message):
-    context = chats.setdefault(message.chat.id, ChatContext())    
+    if message.chat.id not in chats:
+        chats[message.chat.id] = ChatContext()
+        logger.info(f'Added new chat {message.chat.title}[{message.chat.id}]')
+    context = chats[message.chat.id]
     name = get_pretty_username(message.from_user)
-    context.users.add(name)
+    if name not in context.users_set:
+        context.users.append(name)
+        context.users_set.add(name)
+        logger.info(f'Added user f{name}[{message.from_user.id}] '
+                    f'to chat {message.chat.title}[{message.chat.id}]')
     return {'context': context, 'name': name}
 
 
-@dp.message_handler(commands=['start'])
+@dp.message_handler(context_filter, commands=['start'])
 async def send_welcome(message: types.Message):
-    await message.reply("Я пижма весёлая, спелая, садовая!")
+    await message.reply("You spin me right round, baby\n"
+                        "Right round like a record, baby\n"
+                        "Right round round round!")
 
 
 TEMPLATES = [
     [
-        'Итак, кто же сегодня *{wheel} дня*?',
+        'Итак, кто же сегодня <b>{wheel} дня</b>?',
         'Хмм, интересно...',
-        '*АГА*!',
-        'Сегодня ты *{wheel} дня*, {user}!'
+        '<b>АГА</b>!',
+        'Сегодня ты <b>{wheel} дня</b>, {user}!'
     ],
     [
         'Эмм... Ты уверен?',
-        'Ты *точно* уверен?',
+        'Ты <b>точно</b> уверен?',
         'Хотя ладно, процесс уже необратим',
-        'Сегодня я назначаю тебе должность *{wheel} дня*, {user}!'
+        'Сегодня я назначаю тебе должность <b>{wheel} дня</b>, {user}!'
     ],
     [
         'Ищем рандомного кота на улице...',
@@ -86,27 +96,27 @@ TEMPLATES = [
         'Ищем шапку...',
         'Рисуем ASCII-арт...',
         'Готово!',
-        "```"
-        ".∧＿∧"
-        "( ･ω･｡)つ━☆・*。"
-        "⊂　 ノ 　　　・゜+."
-        "しーＪ　　　°。+ *´¨)"
-        "　　　　　　　　　.· ´¸.·*´¨) ¸.·*¨)"
-        "　　　　　　　　　　(¸.·´ (¸.·'* ☆ "
-        "       ВЖУХ, И ТЫ {wheel} ДНЯ, {user}"
-        "```"
+        "<pre>"
+        ".∧＿∧\n"
+        "( ･ω･｡)つ━☆・*。\n"
+        "⊂　 ノ 　　　・゜+.\n"
+        "しーＪ　　　°。+ *´¨)\n"
+        "　　　　　　　　　.· ´¸.·*´¨) ¸.·*¨)\n"
+        "　　　　　　　　　　(¸.·´ (¸.·'* ☆ \n"
+        "    ВЖУХ, И ТЫ {wheel} ДНЯ, {user}\n"
+        "</pre>"
     ],
     [
-        'Кручу-верчу, *{action}* хочу',
-        'Сегодня ты *{wheel} дня*, {bot}',
+        'Кручу-верчу, <b>{action}</b> хочу',
+        'Сегодня ты <b>{wheel} дня</b>, @{bot}',
         '(нет)',
         'На самом деле, это {user}'
     ],
     [
-        '*Колесо Сансары запущено!*',
-        '*Что за дичь?!_',
+        '<b>Колесо Сансары запущено!</b>',
+        '<i>Что за дичь?!</i>',
         'Ну ок...',
-        'Поздравляю, ты *{wheel} дня*, {user}'
+        'Поздравляю, ты <b>{wheel} дня</b>, {user}'
     ]
 
 ]
@@ -116,50 +126,62 @@ async def spin_the_wheel(message: types.Message, context: ChatContext):
     user = random.choice(context.users)
     context.last_winner = user
     context.last_spin = datetime.datetime.today().date()
+    logger.info(f'Winner: user f{user}[{message.from_user.id}] '
+                f'in chat {message.chat.title}[{message.chat.id}]')
+
     lines : List[str] = random.choice(TEMPLATES)
     for line in lines:
-        await bot.send_chat_action(chat_id=message.chat_id,
+        await bot.send_chat_action(chat_id=message.chat.id,
                                    action=types.ChatActions.TYPING)
         await asyncio.sleep(2)
         await message.answer(text=line.format(user=user, bot=BOT_NAME,
                                               action=context.action,
                                               wheel=context.wheel),
-                             parse_mode='MarkdownV2')
+                             parse_mode='HTML')
         await asyncio.sleep(1)
 
 
-@dp.message_handler(commands=['spin'])
-@dp.message_handler(context_filter)
+@dp.message_handler(context_filter, commands=['spin'])
 async def spin(message: types.Message, context: ChatContext):
-    if context.last_spin == datetime.datetime.today().date():
+    if context.last_spin == datetime.datetime.today().date() and context.last_winner:
         await message.answer(
             f'Согласно сегодняшнему розыгрышу, '
-            f'*{context.wheel} дня* — `@{context.last_winner}`',
-            parse_mode='MarkdownV2')
+            f'<b>{context.wheel} дня</b> — <code>{context.last_winner}</code>',
+            parse_mode='HTML')
     else:
-        spin_the_wheel(message, context)
+        await spin_the_wheel(message, context)
 
 
-@dp.message_handler(commands=['force_spin'])
-@dp.message_handler(context_filter)
+@dp.message_handler(context_filter, commands=['force_spin'])
 async def force_spin(message: types.Message, context: ChatContext):
     await spin_the_wheel(message, context)
 
 
-@dp.message_handler(commands=['setname'])
-@dp.message_handler(is_admin=True)
-@dp.message_handler(context_filter)
+def canonize(name: str):
+    return name.\
+        replace('&', '&amp;').\
+        replace('<', '&lt;').\
+        replace('>', '&gt;')
+
+
+@dp.message_handler(context_filter, commands=['setname'], is_admin=True)
 async def set_wheel_name(message: types.Message, context: ChatContext):
-    context.name_of_the_day = message.text
-    await message.reply(f"Текст розыгрыша изменён на {context.name_of_the_day}")
+    if not message.get_args():
+        await message.reply("Я программист, меня не обманешь!")
+        return
+    context.wheel = canonize(message.get_args())
+    await message.reply(f"Текст розыгрыша изменён на {context.wheel}",
+                        parse_mode='HTML')
 
 
-@dp.message_handler(commands=['setaction'])
-@dp.message_handler(is_admin=True)
-@dp.message_handler(context_filter)
+@dp.message_handler(context_filter, commands=['setaction'], is_admin=True)
 async def set_action_name(message: types.Message, context: ChatContext):
-    context.action = message.text
-    await message.reply(f"Ты хочешь меня {context.action}?")
+    if not message.get_args():
+        await message.reply("Ну уж нет!")
+        return
+    context.action = canonize(message.get_args())
+    await message.reply(f"Ты хочешь меня {context.action}?",
+                        parse_mode='HTML')
 
 
 if __name__ == '__main__':
