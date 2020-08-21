@@ -200,7 +200,7 @@ def select_non_users(chat_id: int):
         WHERE user_id NOT IN (
             SELECT user_id
             FROM char_users
-            WHERE chat_id = %d
+            WHERE chat_id = %s
         )
         ;
     '''
