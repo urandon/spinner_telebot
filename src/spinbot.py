@@ -432,8 +432,9 @@ async def scan_chat_users(message: types.Message, context: ChatContext):
     try:
         admins = await bot.get_chat_administrators(message.chat.id)
         for member in admins:
-            update_user_def(message, context, member.user)
-            new_users += 1
+            if member.user.id not in context.users:
+                update_user_def(message, context, member.user)
+                new_users += 1
         for user_id in select_non_users(message.chat.id):
             try:
                 member = await bot.get_chat_member(message.chat.id, user_id)
@@ -444,7 +445,7 @@ async def scan_chat_users(message: types.Message, context: ChatContext):
     except Exception as e:
         logger.warning(f'Error during scanning for admins in chat [{message.chat.id}]: {e}')
 
-    message.answer(f'Found {new_users} new users')
+    await message.answer(f'Found {new_users} new users')
 
 
 @dp.message_handler(context_filter, commands=['winstats'])
@@ -458,7 +459,7 @@ async def list_registered_users(message: types.Message, context: ChatContext):
         template.format(username=user.username, won_times=user.won_times) 
         for user in sorted(users, key=won_key, reverse=True)
     ])
-    message.reply(msg)
+    await message.reply(msg)
 
 
 @dp.message_handler(context_filter, commands=['list_users'])
