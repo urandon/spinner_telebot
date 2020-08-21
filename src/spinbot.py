@@ -380,7 +380,7 @@ async def daily_spin():
         try:
             chat = await bot.get_chat(chat_id)
             await bot.get_chat_administrators(chat_id)
-            await spin_the_wheel(chat, context)
+            await spin(chat, context)
         except Exception as e:
             logger.warning(f'Error during daily spinning in chat [{chat_id}]: {e}')
 
@@ -476,7 +476,7 @@ async def any_trigger(message: types.Message):
 async def on_startup(dp):
     await bot.set_webhook(WEBHOOK_URL)
     load_chats()
-    await daily_spin()
+    # await daily_spin()
 
 
 async def on_shutdown(dp):
