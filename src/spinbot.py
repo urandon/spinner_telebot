@@ -109,6 +109,11 @@ with db.cursor() as cur:
             won_times INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY(chat_id, user_id)
         );''')
+
+    cur.execute(
+        '''
+        CREATE INDEX IF NOT EXISTS uchats_index ON chat_users (chat_id)
+        ;''')
     
     db.commit()
 
@@ -132,7 +137,7 @@ def load_chat(chat_id: int):
         GET_CHAT_USERS = '''
             SELECT user_id, username, won_times
             FROM chat_users
-            WHERE chat_id=%s;
+            WHERE chat_id = %s;
         '''
 
         cur.execute(GET_CHAT_USERS, (chat_id,))
@@ -156,7 +161,7 @@ def load_chats():
                 chats[chat_id] = load_chat(chat_id)
 
 
-def insert_or_assign_chat(chat_id: int, ctx: ChatContext):
+def upsert_chat(chat_id: int, ctx: ChatContext):
     QUERY = '''
         INSERT INTO chat_contexts
         VALUES (%s, %s, %s, %s, %s, %s)
@@ -173,7 +178,7 @@ def insert_or_assign_chat(chat_id: int, ctx: ChatContext):
         db.commit()
 
 
-def insert_or_assign_user(chat_id: int, user_id: int, udef: UserDef):
+def upsert_user(chat_id: int, user_id: int, udef: UserDef):
     QUERY = '''
         INSERT INTO chat_users
         VALUES (%s, %s, %s, %s)
@@ -186,6 +191,23 @@ def insert_or_assign_user(chat_id: int, user_id: int, udef: UserDef):
     with db.cursor() as cur:
         cur.execute(QUERY, (chat_id, user_id, udef.username, udef.won_times))
         db.commit()
+
+
+def select_non_users(chat_id: int):
+    QUERY = '''
+        SELECT DISTINCT user_id
+        FROM chat_users
+        WHERE user_id NOT IN (
+            SELECT user_id
+            FROM char_users
+            WHERE chat_id = %d
+        )
+        ;
+    '''
+
+    with db.cursor() as cur:
+        cur.execute(QUERY)
+        return [u[0] for u in cur.fetchall()]
 
 
 def get_pretty_username(user: types.User):
@@ -204,13 +226,13 @@ def update_user_def(message: types.Message, context: ChatContext, user: types.Us
         udef = UserDef(username=name)
         context.users[user_id] = udef
         context.user_ids.append(user_id)
-        insert_or_assign_user(chat_id, user_id, udef)
+        upsert_user(chat_id, user_id, udef)
         logger.info(f'Added user f{name}[{user_id}] '
             f'to chat {message.chat.title}[{chat_id}]')
     else:
         udef = context.users[user_id]
         udef.username = name
-        insert_or_assign_user(chat_id, user_id, udef)
+        upsert_user(chat_id, user_id, udef)
         logger.info(f'Updated info for user {name}[{user_id}]')
 
 
@@ -219,7 +241,7 @@ async def context_filter(message: types.Message):
     if chat_id not in chats:
         ctx = load_chat(chat_id)
         chats[chat_id] = ctx
-        insert_or_assign_chat(chat_id, ctx)
+        upsert_chat(chat_id, ctx)
         logger.info(f'Added new chat {message.chat.title}[{chat_id}]')
     context = chats[chat_id]
 
@@ -300,8 +322,8 @@ async def spin_the_wheel(chat: types.Chat, context: ChatContext):
     context.last_winner_id = user_id
     context.last_spin = here_now()
     context.last_wheel = context.wheel
-    insert_or_assign_user(chat.id, user_id, user_def)
-    insert_or_assign_chat(chat.id, context)
+    upsert_user(chat.id, user_id, user_def)
+    upsert_chat(chat.id, context)
     logger.info(f'Winner: user f{user}[{user_id}] '
                 f'in chat {chat.title}[{chat.id}]')
 
@@ -321,8 +343,6 @@ async def spin_the_wheel(chat: types.Chat, context: ChatContext):
             await asyncio.sleep(1)
     except Exception as e:
         logger.warning(f'Error during spinning in chat [{chat.id}]: {e}')
-    except:
-        logger.error(f'Something was wrong during spinning in chat [{chat.id}]')
 
 
 @dp.message_handler(context_filter, commands=['spin'])
@@ -342,17 +362,19 @@ async def spin(message: types.Message, context: ChatContext):
 throttle = datetime.timedelta(minutes=10)
 last_daily_spin = None
 
-
 async def daily_spin():
     global last_daily_spin
     now = here_now()
     if last_daily_spin is not None and (now - last_daily_spin) < throttle:
         return
+    if here_now().hour < 8:
+        return
     logger.info('Running daily spinners!')
     last_daily_spin = now
     for chat_id, context in chats.items():
         ctx : ChatContext = context
-        if ctx.last_spin and (now - ctx.last_spin).days < 1:
+        now.date
+        if ctx.last_spin and (ctx.last_spin.date == now.date):
             continue
         logger.info(f'Daily spinning for chat [{chat_id}]')
         try:
@@ -361,18 +383,21 @@ async def daily_spin():
             await spin_the_wheel(chat, context)
         except Exception as e:
             logger.warning(f'Error during daily spinning in chat [{chat_id}]: {e}')
-        else:
-            logger.error(f'Something was wrong during daily spinning in chat [{chat_id}]')
 
 
-
-@dp.message_handler(context_filter, commands=['force_spin'])
+@dp.message_handler(context_filter, commands=['force_spin'], is_admin=True)
 async def force_spin(message: types.Message, context: ChatContext):
     await spin_the_wheel(message.chat, context)
     await daily_spin()
 
 
-def canonize(name: str):
+@dp.message_handler(context_filter, commands=['reset_daily'], is_admin=True)
+async def reset_daily(message: types.Message, context: ChatContext):
+    context.last_spin = None
+    upsert_chat(message.chat.id, context)
+
+
+def html_escape(name: str):
     return name.\
         replace('&', '&amp;').\
         replace('<', '&lt;').\
@@ -384,8 +409,8 @@ async def set_wheel_name(message: types.Message, context: ChatContext):
     if not message.get_args():
         await message.reply("Я программист, меня не обманешь!")
         return
-    context.wheel = canonize(message.get_args())
-    insert_or_assign_chat(message.chat.id, context)
+    context.wheel = html_escape(message.get_args())
+    upsert_chat(message.chat.id, context)
     await message.reply(f"Текст розыгрыша изменён на {context.wheel}",
                         parse_mode='HTML')
 
@@ -395,34 +420,51 @@ async def set_action_name(message: types.Message, context: ChatContext):
     if not message.get_args():
         await message.reply("Ну уж нет!")
         return
-    context.action = canonize(message.get_args())
-    insert_or_assign_chat(message.chat.id, context)
+    context.action = html_escape(message.get_args())
+    upsert_chat(message.chat.id, context)
     await message.reply(f"Ты хочешь меня {context.action}?",
                         parse_mode='HTML')
 
 
 @dp.message_handler(context_filter, commands=['scan'])
-async def add_admins(message: types.Message, context: ChatContext):
+async def scan_chat_users(message: types.Message, context: ChatContext):
+    new_users = 0
     try:
         admins = await bot.get_chat_administrators(message.chat.id)
         for member in admins:
             update_user_def(message, context, member.user)
+            new_users += 1
+        for user_id in select_non_users(message.chat.id):
+            try:
+                member = await bot.get_chat_member(message.chat.id, user_id)
+                update_user_def(message, context, member.user)
+                new_users += 1
+            except Exception as e:
+                pass
     except Exception as e:
         logger.warning(f'Error during scanning for admins in chat [{message.chat.id}]: {e}')
-    except:
-        logger.error(f'Something was wrong during scanning for admins in chat [{message.chat.id}]')
+
+    message.answer(f'Found {new_users} new users')
+
+
+@dp.message_handler(context_filter, commands=['winstats'])
+async def list_registered_users(message: types.Message, context: ChatContext):
+    def won_key(user: UserDef):
+        return user.won_times
+    
+    users : List[UserDef] = context.users.values()
+    template = '<code>{username}</code>:  {won_times}'
+    msg = '\n'.join([
+        template.format(username=user.username, won_times=user.won_times) 
+        for user in sorted(users, key=won_key, reverse=True)
+    ])
+    message.reply(msg)
 
 
 @dp.message_handler(context_filter, commands=['list_users'])
-async def debug_registered(message: types.Message, context: ChatContext):
+async def win_stats(message: types.Message, context: ChatContext):
     names = [u.username for u in context.users.values()]
     await message.reply(f"Загеристрированные участники: {', '.join(names)}")
-
-
-@dp.message_handler(context_filter, commands=['reset_daily'])
-async def reset_daily(message: types.Message, context: ChatContext):
-    context.last_spin = None
-    insert_or_assign_chat(message.chat.id, context)
 
 
 @dp.message_handler()
