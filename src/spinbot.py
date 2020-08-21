@@ -110,10 +110,7 @@ with db.cursor() as cur:
             PRIMARY KEY(chat_id, user_id)
         );''')
 
-    cur.execute(
-        '''
-        CREATE INDEX IF NOT EXISTS uchats_index ON chat_users (chat_id)
-        ;''')
+    cur.execute('DROP INDEX IF EXISTS uchats_index;')
     
     db.commit()
 
