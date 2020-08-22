@@ -110,7 +110,7 @@ with db.cursor() as cur:
             PRIMARY KEY(chat_id, user_id)
         );''')
 
-    cur.execute('DROP INDEX IF EXISTS uchats_index;')
+    cur.execute('CREATE INDEX IF NOT EXISTS uchats_index ON chat_users (chat_id);')
     
     db.commit()
 
@@ -186,7 +186,6 @@ def upsert_user(chat_id: int, user_id: int, udef: UserDef):
     '''
 
     with db.cursor() as cur:
-        cur.execute(QUERY, (chat_id, user_id, udef.username, udef.won_times))
         db.commit()
 
 
@@ -203,7 +202,7 @@ def select_non_users(chat_id: int):
     '''
 
     with db.cursor() as cur:
-        cur.execute(QUERY)
+        cur.execute(QUERY, (chat_id))
         return [u[0] for u in cur.fetchall()]
 
 
