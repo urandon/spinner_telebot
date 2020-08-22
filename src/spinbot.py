@@ -426,6 +426,7 @@ async def set_action_name(message: types.Message, context: ChatContext):
 
 @dp.message_handler(context_filter, commands=['scan'])
 async def scan_chat_users(message: types.Message, context: ChatContext):
+    logger.debug('Scanning new users')
     new_users = 0
     try:
         admins = await bot.get_chat_administrators(message.chat.id)
@@ -433,17 +434,18 @@ async def scan_chat_users(message: types.Message, context: ChatContext):
             if member.user.id not in context.users:
                 update_user_def(message, context, member.user)
                 new_users += 1
-        user_ids = select_non_users(message.chat.id)
-        logger.debug(f'Also scanning: {user_ids}')
-        for user_id in user_ids:
-            try:
-                member = await bot.get_chat_member(message.chat.id, user_id)
-                update_user_def(message, context, member.user)
-                new_users += 1
-            except Exception as e:
-                pass
     except Exception as e:
         logger.warning(f'Error during scanning for admins in chat [{message.chat.id}]: {e}')
+
+    user_ids = select_non_users(message.chat.id)
+    logger.debug(f'Also scanning: {user_ids}')
+    for user_id in user_ids:
+        try:
+            member = await bot.get_chat_member(message.chat.id, user_id)
+            update_user_def(message, context, member.user)
+            new_users += 1
+        except Exception as e:
+            logger.warning(f'Error during checking {user_id} in [{message.chat.id}]: {e}')
 
     await message.answer(f'Found {new_users} new users')
 
