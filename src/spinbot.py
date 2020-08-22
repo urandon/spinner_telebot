@@ -446,7 +446,7 @@ async def scan_chat_users(message: types.Message, context: ChatContext):
 
 
 @dp.message_handler(context_filter, commands=['winstats'])
-async def list_registered_users(message: types.Message, context: ChatContext):
+async def win_stats(message: types.Message, context: ChatContext):
     def won_key(user: UserDef):
         return user.won_times
     
@@ -456,13 +456,7 @@ async def list_registered_users(message: types.Message, context: ChatContext):
         template.format(username=user.username, won_times=user.won_times) 
         for user in sorted(users, key=won_key, reverse=True)
     ])
-    await message.reply(msg)
-
-
-@dp.message_handler(context_filter, commands=['list_users'])
-async def win_stats(message: types.Message, context: ChatContext):
-    names = [u.username for u in context.users.values()]
-    await message.reply(f"Загеристрированные участники: {', '.join(names)}")
+    await message.reply(msg, parse_mode='HTML')
 
 
 @dp.message_handler(commands=['log_level'])
