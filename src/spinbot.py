@@ -437,6 +437,8 @@ async def scan_chat_users(message: types.Message, context: ChatContext):
         for user_id in select_non_users(message.chat.id):
             try:
                 member = await bot.get_chat_member(message.chat.id, user_id)
+                if member.status in ['left', 'kicked']:
+                    continue
                 update_user_def(message, context, member.user)
                 new_users += 1
             except Exception as e:
