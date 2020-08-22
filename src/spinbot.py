@@ -465,6 +465,17 @@ async def win_stats(message: types.Message, context: ChatContext):
     await message.reply(f"Загеристрированные участники: {', '.join(names)}")
 
 
+@dp.message_handler(commands=['log_level'])
+async def log_level(message: types.Message):
+    logging.getLogger().setLevel({
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR
+        }.get(message.get_args().upper(), logging.INFO)
+    )
+
+
 @dp.message_handler()
 async def any_trigger(message: types.Message):
     await daily_spin()
