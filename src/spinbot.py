@@ -475,6 +475,11 @@ async def log_level(message: types.Message):
     )
 
 
+@dp.message_handler(context_filter, commands=['now'])
+async def time_o_clock(message: types.Message):
+    await message.reply(f'Now {here_now()}')
+
+
 @dp.message_handler()
 async def any_trigger(message: types.Message):
     await daily_spin()
