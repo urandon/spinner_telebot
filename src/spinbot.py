@@ -204,7 +204,7 @@ def select_non_users(chat_id: int):
     '''
 
     with db.cursor() as cur:
-        cur.execute(QUERY, (chat_id))
+        cur.execute(QUERY, (chat_id,))
         return cur.fetchall()
 
 
