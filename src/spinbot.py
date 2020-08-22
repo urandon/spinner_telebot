@@ -205,7 +205,7 @@ def select_non_users(chat_id: int):
 
     with db.cursor() as cur:
         cur.execute(QUERY, (chat_id,))
-        return cur.fetchall()
+        return [u[0] for u in cur.fetchall()]
 
 
 def get_pretty_username(user: types.User):
