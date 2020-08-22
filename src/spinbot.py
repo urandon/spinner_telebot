@@ -242,7 +242,7 @@ def update_user_def(message: types.Message, context: ChatContext, user: types.Us
         context.users[user_id] = udef
         context.user_ids.append(user_id)
         upsert_user(chat_id, user_id, udef)
-        logger.info(f'Added user f{name}[{user_id}] '
+        logger.info(f'Added user {name}[{user_id}] '
             f'to chat {message.chat.title}[{chat_id}]')
     else:
         udef = context.users[user_id]
@@ -326,7 +326,7 @@ TEMPLATES = [
 
 def here_now():
     now = datetime.datetime.utcnow()
-    return TIME_ZONE.localize(now)
+    return TIME_ZONE.fromutc(now)
 
 
 async def spin_the_wheel(chat: types.Chat, context: ChatContext):
