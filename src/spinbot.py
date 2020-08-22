@@ -202,8 +202,10 @@ def delete_user_from_chat(chat_id: int, user_id: int):
         cur.execute(QUERY, (chat_id, user_id))
         db.commit()
 
-        chats[chat_id].users.pop(user_id)
+        user_def = chats[chat_id].users.pop(user_id)
         chats[chat_id].user_ids = list(chats[chat_id].users.keys())
+
+        logger.info(f'Deleted {user_def.username} from chat [{chat_id}]')
 
 
 def select_non_users(chat_id: int):
@@ -465,7 +467,7 @@ async def scan_chat_users(message: types.Message, context: ChatContext):
 
 
 @dp.message_handler(context_filter, commands=['clean_left'])
-async def win_stats(message: types.Message, context: ChatContext):
+async def clean_left(message: types.Message, context: ChatContext):
     logger.debug('Cleanind dead users')
     dead_users = 0
 
