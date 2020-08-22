@@ -191,6 +191,21 @@ def upsert_user(chat_id: int, user_id: int, udef: UserDef):
         db.commit()
 
 
+def delete_user_from_chat(chat_id: int, user_id: int):
+    QUERY = '''
+        DELETE FROM chat_users
+        WHERE chat_id = %s
+          AND user_id = %s;
+    '''
+
+    with db.cursor() as cur:
+        cur.execute(QUERY, (chat_id, user_id))
+        db.commit()
+
+        chats[chat_id].users.pop(user_id)
+        chats[chat_id].user_ids = list(chats[chat_id].users.keys())
+
+
 def select_non_users(chat_id: int):
     QUERY = '''
         SELECT DISTINCT user_id
@@ -447,6 +462,23 @@ async def scan_chat_users(message: types.Message, context: ChatContext):
         logger.warning(f'Error during for users in chat [{message.chat.id}]: {e}')
 
     await message.answer(f'Found {new_users} new users')
+
+
+@dp.message_handler(context_filter, commands=['clean_left'])
+async def win_stats(message: types.Message, context: ChatContext):
+    logger.debug('Cleanind dead users')
+    dead_users = 0
+
+    for user_id in context.user_ids:
+        try:
+            member = await bot.get_chat_member(message.chat.id, user_id)
+            if member.status in ['left', 'kicked']:
+                delete_user_from_chat(message.chat.id, user_id)
+                dead_users += 1
+        except Exception as e:
+            logger.warning(f'Error during checking {user_id} in [{message.chat.id}]: {e}')
+
+    await message.answer(f'Cleaned {new_users} dead users')
 
 
 @dp.message_handler(context_filter, commands=['winstats'])
