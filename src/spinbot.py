@@ -434,18 +434,15 @@ async def scan_chat_users(message: types.Message, context: ChatContext):
             if member.user.id not in context.users:
                 update_user_def(message, context, member.user)
                 new_users += 1
+        for user_id in select_non_users(message.chat.id):
+            try:
+                member = await bot.get_chat_member(message.chat.id, user_id)
+                update_user_def(message, context, member.user)
+                new_users += 1
+            except Exception as e:
+                logger.warning(f'Error during checking {user_id} in [{message.chat.id}]: {e}')
     except Exception as e:
-        logger.warning(f'Error during scanning for admins in chat [{message.chat.id}]: {e}')
-
-    user_ids = select_non_users(message.chat.id)
-    logger.debug(f'Also scanning: {user_ids}')
-    for user_id in user_ids:
-        try:
-            member = await bot.get_chat_member(message.chat.id, user_id)
-            update_user_def(message, context, member.user)
-            new_users += 1
-        except Exception as e:
-            logger.warning(f'Error during checking {user_id} in [{message.chat.id}]: {e}')
+        logger.warning(f'Error during for users in chat [{message.chat.id}]: {e}')
 
     await message.answer(f'Found {new_users} new users')
 
