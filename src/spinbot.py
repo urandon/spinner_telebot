@@ -186,6 +186,7 @@ def upsert_user(chat_id: int, user_id: int, udef: UserDef):
     '''
 
     with db.cursor() as cur:
+        cur.execute(QUERY, (chat_id, user_id, udef.username, udef.won_times))
         db.commit()
 
 
@@ -203,7 +204,7 @@ def select_non_users(chat_id: int):
 
     with db.cursor() as cur:
         cur.execute(QUERY, (chat_id))
-        return [u[0] for u in cur.fetchall()]
+        return cur.fetchall()
 
 
 def get_pretty_username(user: types.User):
