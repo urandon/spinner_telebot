@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import datetime
 import pytz
 import random
+import traceback
 from typing import List, Dict, Set
 import asyncio
 
@@ -307,7 +308,7 @@ TEMPLATES = [
 
 
 def here_now():
-    now = datetime.datetime.now()
+    now = datetime.datetime.utcnow()
     return TIME_ZONE.localize(now)
 
 
@@ -432,7 +433,9 @@ async def scan_chat_users(message: types.Message, context: ChatContext):
             if member.user.id not in context.users:
                 update_user_def(message, context, member.user)
                 new_users += 1
-        for user_id in select_non_users(message.chat.id):
+        user_ids = select_non_users(message.chat.id)
+        logger.debug(f'Also scanning: {user_ids}')
+        for user_id in user_ids:
             try:
                 member = await bot.get_chat_member(message.chat.id, user_id)
                 update_user_def(message, context, member.user)
