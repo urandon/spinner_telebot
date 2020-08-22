@@ -478,7 +478,7 @@ async def win_stats(message: types.Message, context: ChatContext):
         except Exception as e:
             logger.warning(f'Error during checking {user_id} in [{message.chat.id}]: {e}')
 
-    await message.answer(f'Cleaned {new_users} dead users')
+    await message.answer(f'Cleaned {dead_users} dead users')
 
 
 @dp.message_handler(context_filter, commands=['winstats'])
